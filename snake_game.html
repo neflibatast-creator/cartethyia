@@ -1926,11 +1926,18 @@ function initPeer(customId) {
   // 使用自定义 ID 或生成随机 Peer ID
   const peerId = customId || ('snake-' + Math.random().toString(36).substring(2, 10));
   onlinePeer = new Peer(peerId, {
-    host: '0.peerjs.com',
-    port: 443,
-    secure: true,
-    debug: 0
-  });
+      host: '0.peerjs.com',
+      port: 443,
+      secure: true,
+      debug: 0,
+      config: {
+        iceServers:[
+          { urls: 'stun:stun.qq.com:3478' },
+          { urls: 'stun:stun.miwifi.com:3478' },
+          { urls: 'stun:stun.chat.bilibili.com:3478' }
+        ]
+      }
+    });
 
   onlinePeer.on('open', (id) => {
     console.log('PeerJS 已连接, ID:', id);
