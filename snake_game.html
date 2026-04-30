@@ -844,6 +844,7 @@ const PVP_DEATH_DROP_RADIUS = 3;
 const PVP_RAGE_INTERVAL_MS = 120000;
 const PVP_RAGE_DURATION_MS = 12000;
 const PVP_FOOD_DROP_CHANCE_NORMAL = 0.12;
+const PVP_DEATH_DROP_PROTECT_MS = 1800;
 
 const PVP_AVAILABLE_COLORS = [
   '#00ff66', '#4488ff', '#ff8844', '#ff44cc',
@@ -1180,6 +1181,8 @@ let pvpDeathLen1 = 0, pvpDeathLen2 = 0;
 let pvpRageUntil = 0;
 let pvpNextRageAt = 0;
 let pvpLastAmbientDropAt = 0;
+let pvpDeathDropProtectUntil = 0;
+let pvpDeathDropCenter = null;
 let pvpLastMove1 = 0, pvpLastMove2 = 0;
 
 let pvp = {
@@ -1423,6 +1426,8 @@ function pvpStartGame() {
   pvpRageUntil = 0;
   pvpNextRageAt = Date.now() + PVP_RAGE_INTERVAL_MS;
   pvpLastAmbientDropAt = 0;
+  pvpDeathDropProtectUntil = 0;
+  pvpDeathDropCenter = null;
   updatePvpRageUI(Date.now());
   pvpTimeLeft = PVP_GAME_DURATION;
 
@@ -1499,6 +1504,12 @@ function pvpPickDeathDropFood(remainingPointsBudget) {
   return candidates[0] || null;
 }
 
+function pvpIsNearDeathDropCenter(x, y) {
+  if (!pvpDeathDropCenter) return false;
+  return Math.abs(x - pvpDeathDropCenter.x) <= PVP_DEATH_DROP_RADIUS + 1 &&
+         Math.abs(y - pvpDeathDropCenter.y) <= PVP_DEATH_DROP_RADIUS + 1;
+}
+
 function pvpSpawnDeathDropsAround(center, deathScore) {
   if (!center || deathScore <= 0) return;
   const totalDropPointsBudget = Math.floor(deathScore / 3);
@@ -1546,6 +1557,9 @@ function pvpSpawnDeathDropsAround(center, deathScore) {
     usedPos.add(key);
     usedPoints += type.points;
   }
+  // 短时间保护死亡掉落区域，避免系统普通刷怪（含炸弹）混入造成误判
+  pvpDeathDropCenter = center;
+  pvpDeathDropProtectUntil = Date.now() + PVP_DEATH_DROP_PROTECT_MS;
 }
 
 function pvpKill(n) {
@@ -1603,6 +1617,8 @@ function pvpCheckRespawns() {
 function pvpEnd() {
   pvp.gameOver = true; pvpPhase = 'over';
   pvpRageUntil = 0;
+  pvpDeathDropProtectUntil = 0;
+  pvpDeathDropCenter = null;
   clearInterval(pvpGameLoop); clearInterval(pvpTimerInterval);
   document.getElementById('pvpPauseOverlay').classList.remove('active');
   document.getElementById('pvpTimer').classList.remove('urgent');
@@ -1630,19 +1646,34 @@ function pvpSetPaused(v) {
 
 // ── PvP food ──────────────────────────────────────
 
-function pvpPickFood() {
+function pvpPickFood(allowSpecial = true) {
+  const pool = allowSpecial
+    ? FOOD_TYPES
+    : FOOD_TYPES.filter(ft => ft.points > 0 && !ft.shield && !ft.speedBoost);
   const r = Math.random(); let acc = 0;
-  for (const ft of FOOD_TYPES) { acc += ft.prob; if (r < acc) return ft; }
-  return FOOD_TYPES[FOOD_TYPES.length - 1];
+  let total = 0;
+  for (const ft of pool) total += ft.prob;
+  const target = r * (total || 1);
+  for (const ft of pool) { acc += ft.prob; if (target < acc) return ft; }
+  return pool[pool.length - 1] || FOOD_TYPES[0];
 }
 
 function pvpSpawnFood() {
   const occ = pvpOccupied();
   const free = [];
-  for (let x = 0; x < COLS; x++) for (let y = 0; y < ROWS; y++) if (!occ.has(`${x},${y}`)) free.push({x, y});
+  const protectNearDeath = Date.now() < pvpDeathDropProtectUntil;
+  for (let x = 0; x < COLS; x++) for (let y = 0; y < ROWS; y++) {
+    if (occ.has(`${x},${y}`)) continue;
+    if (protectNearDeath && pvpIsNearDeathDropCenter(x, y)) continue;
+    free.push({x, y});
+  }
+  // 若严格保护导致没有位置，再放宽到全图空位
+  if (!free.length) {
+    for (let x = 0; x < COLS; x++) for (let y = 0; y < ROWS; y++) if (!occ.has(`${x},${y}`)) free.push({x, y});
+  }
   if (!free.length) return false;
   const pos = free[Math.floor(Math.random() * free.length)];
-  const type = pvpPickFood();
+  const type = pvpPickFood(true);
   pvp.foods.push({x: pos.x, y: pos.y, type, expiresAt: Date.now() + type.lifetime + (Math.random() - 0.5) * 2000});
   return true;
 }
