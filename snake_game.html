@@ -676,13 +676,15 @@
 <div class="game-page" id="pvpPage">
   <h1>SNAKE GAME - PvP</h1>
   <div class="info-bar">
-    <div class="stat">P1(WASD): <span class="score-val" id="pvpScoreLive1" style="color:#00ff66;">0</span></div>
-    <div class="stat">P2(↑↓←→): <span class="score-val" id="pvpScoreLive2" style="color:#4488ff;">0</span></div>
+    <div class="stat">P1(WASD/F技能): <span class="score-val" id="pvpScoreLive1" style="color:#00ff66;">0</span></div>
+    <div class="stat">P2(↑↓←→/左Ctrl技能): <span class="score-val" id="pvpScoreLive2" style="color:#4488ff;">0</span></div>
     <span id="pvpTimer">05:00</span>
     <div class="timer-stat shield-stat" id="pvpShield1">P1护盾 <span id="pvpShieldVal1">0.0</span>s</div>
     <div class="timer-stat speed-stat" id="pvpSpeed1">P1加速 <span id="pvpSpeedVal1">0.0</span>s</div>
+    <span class="skill-indicator" id="pvpSkillInd1"><span class="skill-icon none" id="pvpSkillIcon1"></span><span id="pvpSkillStatus1" style="font-size:0.65rem;min-height:14px;"></span></span>
     <div class="timer-stat shield-stat" id="pvpShield2">P2护盾 <span id="pvpShieldVal2">0.0</span>s</div>
     <div class="timer-stat speed-stat" id="pvpSpeed2">P2加速 <span id="pvpSpeedVal2">0.0</span>s</div>
+    <span class="skill-indicator" id="pvpSkillInd2"><span class="skill-icon none" id="pvpSkillIcon2"></span><span id="pvpSkillStatus2" style="font-size:0.65rem;min-height:14px;"></span></span>
 
   </div>
   <div class="game-row">
@@ -1150,6 +1152,11 @@ let pvpGameLoop = null;
 // Per-player effects
 let pvpShield1 = 0, pvpShield2 = 0;
 let pvpSpeed1 = 0, pvpSpeed2 = 0;
+// PvP 技能状态
+let pvpSkillActive1 = null, pvpSkillActive2 = null;
+let pvpSkillCooldown1 = 0, pvpSkillCooldown2 = 0;
+let pvpSkillUses1 = 0, pvpSkillUses2 = 0;
+let pvpSkillUntil1 = 0, pvpSkillUntil2 = 0;
 let pvpDead1 = 0, pvpDead2 = 0;
 let pvpDeathLen1 = 0, pvpDeathLen2 = 0;
 let pvpLastMove1 = 0, pvpLastMove2 = 0;
@@ -1344,6 +1351,10 @@ function initPvp() {
   pvpChar1 = 'default'; pvpChar2 = 'default';
   pvpTimeLeft = PVP_GAME_DURATION;
   pvpShield1 = pvpShield2 = pvpSpeed1 = pvpSpeed2 = 0;
+  pvpSkillActive1 = null; pvpSkillActive2 = null;
+  pvpSkillCooldown1 = 0; pvpSkillCooldown2 = 0;
+  pvpSkillUses1 = 0; pvpSkillUses2 = 0;
+  pvpSkillUntil1 = 0; pvpSkillUntil2 = 0;
   pvpDead1 = pvpDead2 = pvpDeathLen1 = pvpDeathLen2 = pvpLastMove1 = pvpLastMove2 = 0;
   pvp.snake1 = []; pvp.snake2 = []; pvp.score1 = pvp.score2 = 0; pvp.foods = []; pvp.gameOver = false; pvp.paused = false;
 
@@ -1354,6 +1365,8 @@ function initPvp() {
   document.getElementById('pvpOverlay').classList.remove('active');
   document.getElementById('pvpPauseOverlay').classList.remove('active');
   ['pvpShield1','pvpShield2','pvpSpeed1','pvpSpeed2'].forEach(id => document.getElementById(id).classList.remove('active'));
+  // 隐藏技能指示器
+  ['pvpSkillInd1','pvpSkillInd2'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
 
   document.querySelector('#pvpScoreLive1').style.color = pvpColor1;
   document.querySelector('#pvpScoreLive2').style.color = pvpColor2;
@@ -1371,6 +1384,20 @@ function pvpStartGame() {
 
   pvp.score1 = pvp.score2 = 0; pvp.foods = []; pvp.gameOver = false; pvp.paused = false;
   pvpShield1 = pvpShield2 = pvpSpeed1 = pvpSpeed2 = 0;
+  // 初始化技能状态
+  pvpSkillActive1 = null; pvpSkillActive2 = null;
+  pvpSkillCooldown1 = 0; pvpSkillCooldown2 = 0;
+  pvpSkillUntil1 = 0; pvpSkillUntil2 = 0;
+  const charDef1 = CHARACTERS.find(c => c.id === pvpChar1);
+  const charDef2 = CHARACTERS.find(c => c.id === pvpChar2);
+  if (charDef1 && charDef1.skill) {
+    const sd1 = SKILL_DEFS[charDef1.skill];
+    pvpSkillUses1 = sd1 ? sd1.maxUses : 0;
+  } else { pvpSkillUses1 = 0; }
+  if (charDef2 && charDef2.skill) {
+    const sd2 = SKILL_DEFS[charDef2.skill];
+    pvpSkillUses2 = sd2 ? sd2.maxUses : 0;
+  } else { pvpSkillUses2 = 0; }
   pvpDead1 = pvpDead2 = pvpDeathLen1 = pvpDeathLen2 = pvpLastMove1 = pvpLastMove2 = 0;
   pvpTimeLeft = PVP_GAME_DURATION;
 
@@ -1379,6 +1406,12 @@ function pvpStartGame() {
   document.getElementById('pvpTimer').textContent = '05:00';
   document.getElementById('pvpTimer').classList.remove('urgent');
   ['pvpShield1','pvpShield2','pvpSpeed1','pvpSpeed2'].forEach(id => document.getElementById(id).classList.remove('active'));
+  // 重置技能UI
+  ['pvpSkillIcon1','pvpSkillIcon2','pvpSkillStatus1','pvpSkillStatus2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.display = 'none'; el.textContent = ''; }
+  });
+  updatePvpSkillUI();
 
   const r1 = pvpSpawnSnake(PVP_BASE_LENGTH, []);
   pvp.snake1 = r1.snake; pvp.dir1 = r1.dir; pvp.nextDir1 = r1.dir;
@@ -1537,8 +1570,15 @@ function pvpTick() {
     if (h1.x === h2.x && h1.y === h2.y) { pvpKill(1); pvpKill(2); moved = true; }
   }
 
+  // 技能计时器：检查技能是否过期、冷却是否到期
+  if (pvpSkillUntil1 > 0 && now >= pvpSkillUntil1) { pvpSkillActive1 = null; pvpSkillUntil1 = 0; }
+  if (pvpSkillUntil2 > 0 && now >= pvpSkillUntil2) { pvpSkillActive2 = null; pvpSkillUntil2 = 0; }
+  if (pvpSkillCooldown1 > 0 && now >= pvpSkillCooldown1) { pvpSkillCooldown1 = 0; }
+  if (pvpSkillCooldown2 > 0 && now >= pvpSkillCooldown2) { pvpSkillCooldown2 = 0; }
+
   // Update effect displays
   pvpUpdateEffects(now);
+  updatePvpSkillUI();
 
   if (moved) drawPvp();
 }
@@ -1549,7 +1589,8 @@ function pvpMovePlayer(n) {
   const otherSnake = isP1 ? pvp.snake2 : pvp.snake1;
   if (isP1) pvp.dir1 = pvp.nextDir1; else pvp.dir2 = pvp.nextDir2;
   const dir = isP1 ? pvp.dir1 : pvp.dir2;
-  const shielded = isP1 ? (pvpShield1 > Date.now()) : (pvpShield2 > Date.now());
+  const skillShield = isP1 ? (pvpSkillUntil1 > Date.now() && pvpSkillActive1 && pvpSkillActive1.skillId === 'shield') : (pvpSkillUntil2 > Date.now() && pvpSkillActive2 && pvpSkillActive2.skillId === 'shield');
+  const shielded = isP1 ? (pvpShield1 > Date.now() || skillShield) : (pvpShield2 > Date.now() || skillShield);
   const otherAlive = isP1 ? (!pvpDead2 && pvp.snake2.length > 0) : (!pvpDead1 && pvp.snake1.length > 0);
 
   const head = snake[0], nh = {x: head.x, y: head.y};
@@ -1591,6 +1632,44 @@ function pvpMovePlayer(n) {
   }
 }
 
+// ── PvP 技能使用 ───────────────────────────────────
+function pvpUseSkill(n) {
+  const alive = n === 1 ? (!pvpDead1 && pvp.snake1.length > 0) : (!pvpDead2 && pvp.snake2.length > 0);
+  if (!alive) return;
+  const charId = n === 1 ? pvpChar1 : pvpChar2;
+  const charDef = CHARACTERS.find(c => c.id === charId);
+  if (!charDef || !charDef.skill) return;
+  const skillDef = SKILL_DEFS[charDef.skill];
+  if (!skillDef) return;
+
+  const cooldown = n === 1 ? pvpSkillCooldown1 : pvpSkillCooldown2;
+  const uses = n === 1 ? pvpSkillUses1 : pvpSkillUses2;
+  const until = n === 1 ? pvpSkillUntil1 : pvpSkillUntil2;
+  const now = Date.now();
+
+  if (cooldown > now) return;
+  if (uses <= 0) return;
+  if (until > now) return;
+
+  // 激活技能
+  const activeObj = { skillId: skillDef.id, until: now + skillDef.duration };
+
+  if (n === 1) {
+    pvpSkillActive1 = activeObj;
+    pvpSkillUntil1 = now + skillDef.duration;
+    pvpSkillUses1--;
+    pvpSkillCooldown1 = now + skillDef.cooldown;
+  } else {
+    pvpSkillActive2 = activeObj;
+    pvpSkillUntil2 = now + skillDef.duration;
+    pvpSkillUses2--;
+    pvpSkillCooldown2 = now + skillDef.cooldown;
+  }
+
+  updatePvpSkillUI();
+  drawPvp();
+}
+
 function pvpUpdateEffects(now) {
   // P1 shield
   if (pvpShield1 > now) { document.getElementById('pvpShieldVal1').textContent = ((pvpShield1 - now) / 1000).toFixed(1); document.getElementById('pvpShield1').classList.add('active'); }
@@ -1604,6 +1683,56 @@ function pvpUpdateEffects(now) {
   // P2 speed
   if (pvpSpeed2 > now) { document.getElementById('pvpSpeedVal2').textContent = ((pvpSpeed2 - now) / 1000).toFixed(1); document.getElementById('pvpSpeed2').classList.add('active'); }
   else document.getElementById('pvpSpeed2').classList.remove('active');
+}
+
+// ── PvP 技能UI更新 ─────────────────────────────────
+function updatePvpSkillUI() {
+  const now = Date.now();
+  const icons = [null, 'pvpSkillIcon1', 'pvpSkillIcon2'];
+  const statuses = [null, 'pvpSkillStatus1', 'pvpSkillStatus2'];
+  const indicators = [null, 'pvpSkillInd1', 'pvpSkillInd2'];
+  const chars = [null, pvpChar1, pvpChar2];
+  const untildata = [null, pvpSkillUntil1, pvpSkillUntil2];
+  const cooldowndata = [null, pvpSkillCooldown1, pvpSkillCooldown2];
+  const usesdata = [null, pvpSkillUses1, pvpSkillUses2];
+
+  for (let i = 1; i <= 2; i++) {
+    const iconEl = document.getElementById(icons[i]);
+    const statusEl = document.getElementById(statuses[i]);
+    const indEl = document.getElementById(indicators[i]);
+    if (!iconEl || !statusEl) continue;
+
+    const charDef = CHARACTERS.find(c => c.id === chars[i]);
+    if (!charDef || !charDef.skill) {
+      iconEl.className = 'skill-icon none';
+      statusEl.textContent = '';
+      if (indEl) indEl.style.display = 'none';
+      continue;
+    }
+
+    const skillDef = SKILL_DEFS[charDef.skill];
+    if (indEl) indEl.style.display = 'inline-flex';
+
+    if (untildata[i] > now) {
+      // 技能激活中
+      iconEl.className = 'skill-icon active';
+      const remaining = Math.ceil((untildata[i] - now) / 1000);
+      statusEl.innerHTML = '<span class="skill-active-text">' + skillDef.name + ' ' + remaining + 's</span>';
+    } else if (cooldowndata[i] > now) {
+      // 冷却中
+      iconEl.className = 'skill-icon cooldown';
+      const remaining = Math.ceil((cooldowndata[i] - now) / 1000);
+      statusEl.innerHTML = '<span class="skill-cooldown-text">CD ' + remaining + 's</span>';
+    } else if (usesdata[i] > 0) {
+      // 可用
+      iconEl.className = 'skill-icon ready';
+      statusEl.textContent = '就绪 x' + usesdata[i];
+    } else {
+      // 已耗尽
+      iconEl.className = 'skill-icon none';
+      statusEl.textContent = '';
+    }
+  }
 }
 
 // ── PvP drawing ───────────────────────────────────
@@ -1655,29 +1784,53 @@ function drawPvp() {
   // Snake 1
   if (pvp.snake1.length) {
     const rgb1 = hexToRgb(pvpColor1), sh1 = pvpShield1 > now, bo1 = pvpSpeed1 > now;
-    pvp.snake1.forEach((s, i) => {
-      const alpha = 1 - i * 0.006;
-      let c;
-      if (i === 0) { if (sh1) c = '#ffb800'; else if (bo1) c = '#ffdd00'; else c = pvpColor1; }
-      else { if (sh1) c = `rgba(200,150,0,${Math.max(0.4, alpha)})`; else if (bo1) c = `rgba(220,200,0,${Math.max(0.4, alpha)})`; else c = `rgba(${rgb1.r},${rgb1.g},${rgb1.b},${Math.max(0.4, alpha)})`; }
-      pvpCtx.fillStyle = c; pvpCtx.fillRect(s.x * GRID + 1, s.y * GRID + 1, GRID - 2, GRID - 2);
-    });
-    if (sh1) { const p = 0.5 + 0.5 * Math.sin(now / 150); pvpCtx.strokeStyle = `rgba(255,184,0,${0.35+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffb800'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake1.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
-    if (bo1 && !sh1) { const p = 0.5 + 0.5 * Math.sin(now / 100); pvpCtx.strokeStyle = `rgba(255,220,0,${0.3+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffdd00'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake1.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
+    const invis1 = pvpSkillUntil1 > now && pvpSkillActive1 && pvpSkillActive1.skillId === 'invisibility';
+    const skillShield1 = pvpSkillUntil1 > now && pvpSkillActive1 && pvpSkillActive1.skillId === 'shield';
+    const totalShield1 = sh1 || skillShield1;
+    if (!invis1) {
+      pvp.snake1.forEach((s, i) => {
+        const alpha = 1 - i * 0.006;
+        let c;
+        if (i === 0) { if (totalShield1) c = '#ffb800'; else if (bo1) c = '#ffdd00'; else c = pvpColor1; }
+        else { if (totalShield1) c = `rgba(200,150,0,${Math.max(0.4, alpha)})`; else if (bo1) c = `rgba(220,200,0,${Math.max(0.4, alpha)})`; else c = `rgba(${rgb1.r},${rgb1.g},${rgb1.b},${Math.max(0.4, alpha)})`; }
+        pvpCtx.fillStyle = c; pvpCtx.fillRect(s.x * GRID + 1, s.y * GRID + 1, GRID - 2, GRID - 2);
+      });
+    } else {
+      // 隐身：仅显示微弱轮廓
+      pvp.snake1.forEach((s, i) => {
+        const alpha = Math.max(0.08, 0.2 - i * 0.01);
+        pvpCtx.fillStyle = `rgba(${rgb1.r},${rgb1.g},${rgb1.b},${alpha})`;
+        pvpCtx.fillRect(s.x * GRID + 1, s.y * GRID + 1, GRID - 2, GRID - 2);
+      });
+    }
+    if (totalShield1) { const p = 0.5 + 0.5 * Math.sin(now / 150); pvpCtx.strokeStyle = `rgba(255,184,0,${0.35+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffb800'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake1.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
+    if (bo1 && !totalShield1) { const p = 0.5 + 0.5 * Math.sin(now / 100); pvpCtx.strokeStyle = `rgba(255,220,0,${0.3+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffdd00'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake1.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
   }
 
   // Snake 2
   if (pvp.snake2.length) {
     const rgb2 = hexToRgb(pvpColor2), sh2 = pvpShield2 > now, bo2 = pvpSpeed2 > now;
-    pvp.snake2.forEach((s, i) => {
-      const alpha = 1 - i * 0.006;
-      let c;
-      if (i === 0) { if (sh2) c = '#ffb800'; else if (bo2) c = '#ffdd00'; else c = pvpColor2; }
-      else { if (sh2) c = `rgba(200,150,0,${Math.max(0.4, alpha)})`; else if (bo2) c = `rgba(220,200,0,${Math.max(0.4, alpha)})`; else c = `rgba(${rgb2.r},${rgb2.g},${rgb2.b},${Math.max(0.4, alpha)})`; }
-      pvpCtx.fillStyle = c; pvpCtx.fillRect(s.x * GRID + 1, s.y * GRID + 1, GRID - 2, GRID - 2);
-    });
-    if (sh2) { const p = 0.5 + 0.5 * Math.sin(now / 150); pvpCtx.strokeStyle = `rgba(255,184,0,${0.35+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffb800'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake2.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
-    if (bo2 && !sh2) { const p = 0.5 + 0.5 * Math.sin(now / 100); pvpCtx.strokeStyle = `rgba(255,220,0,${0.3+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffdd00'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake2.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
+    const invis2 = pvpSkillUntil2 > now && pvpSkillActive2 && pvpSkillActive2.skillId === 'invisibility';
+    const skillShield2 = pvpSkillUntil2 > now && pvpSkillActive2 && pvpSkillActive2.skillId === 'shield';
+    const totalShield2 = sh2 || skillShield2;
+    if (!invis2) {
+      pvp.snake2.forEach((s, i) => {
+        const alpha = 1 - i * 0.006;
+        let c;
+        if (i === 0) { if (totalShield2) c = '#ffb800'; else if (bo2) c = '#ffdd00'; else c = pvpColor2; }
+        else { if (totalShield2) c = `rgba(200,150,0,${Math.max(0.4, alpha)})`; else if (bo2) c = `rgba(220,200,0,${Math.max(0.4, alpha)})`; else c = `rgba(${rgb2.r},${rgb2.g},${rgb2.b},${Math.max(0.4, alpha)})`; }
+        pvpCtx.fillStyle = c; pvpCtx.fillRect(s.x * GRID + 1, s.y * GRID + 1, GRID - 2, GRID - 2);
+      });
+    } else {
+      // 隐身：仅显示微弱轮廓
+      pvp.snake2.forEach((s, i) => {
+        const alpha = Math.max(0.08, 0.2 - i * 0.01);
+        pvpCtx.fillStyle = `rgba(${rgb2.r},${rgb2.g},${rgb2.b},${alpha})`;
+        pvpCtx.fillRect(s.x * GRID + 1, s.y * GRID + 1, GRID - 2, GRID - 2);
+      });
+    }
+    if (totalShield2) { const p = 0.5 + 0.5 * Math.sin(now / 150); pvpCtx.strokeStyle = `rgba(255,184,0,${0.35+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffb800'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake2.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
+    if (bo2 && !totalShield2) { const p = 0.5 + 0.5 * Math.sin(now / 100); pvpCtx.strokeStyle = `rgba(255,220,0,${0.3+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffdd00'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake2.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
   }
 
   // Respawn countdown
@@ -1752,6 +1905,11 @@ document.addEventListener('keydown', e => {
     // Playing
     if (pvpPhase === 'playing') {
       if (pvp.gameOver || pvp.paused) return;
+
+      // P1 技能: F 键 (WASD玩家)
+      if ((e.key === 'f' || e.key === 'F') && !pvpDead1) { pvpUseSkill(1); e.preventDefault(); return; }
+      // P2 技能: 左Ctrl (方向键玩家)
+      if (e.key === 'Control' && e.code === 'ControlLeft' && !pvpDead2) { pvpUseSkill(2); e.preventDefault(); return; }
 
       if (!pvpDead1) { const d = pvpDirMap(key, 'wasd'); if (d && opposites[d.toLowerCase()] !== pvp.dir1) { pvp.nextDir1 = d; e.preventDefault(); } }
       if (!pvpDead2) { const d = pvpDirMap(key, 'arrows'); if (d && opposites[d.toLowerCase()] !== pvp.dir2) { pvp.nextDir2 = d; e.preventDefault(); } }
@@ -1926,27 +2084,18 @@ function initPeer(customId) {
   // 使用自定义 ID 或生成随机 Peer ID
   const peerId = customId || ('snake-' + Math.random().toString(36).substring(2, 10));
   onlinePeer = new Peer(peerId, {
-      host: '0.peerjs.com',
-      port: 443,
-      secure: true,
-      debug: 0,
-      config: {
-        iceServers:[
-          { urls: 'stun:stun.qq.com:3478' },
-          { urls: 'stun:stun.miwifi.com:3478' },
-          {
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          },
-          {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          }
-        ]
-      }
-    });
+    host: '0.peerjs.com',
+    port: 443,
+    secure: true,
+    debug: 0,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
+    }
+  });
 
   onlinePeer.on('open', (id) => {
     console.log('PeerJS 已连接, ID:', id);
@@ -1960,7 +2109,10 @@ function initPeer(customId) {
   onlinePeer.on('error', (err) => {
     console.error('PeerJS 错误:', err);
     if (err.type === 'unavailable-id') {
-      alert('该房间号已被占用，请换一个');
+      // 房间号已被占用，PeerJS 会自动分配新 ID，无需弹窗打断
+      console.warn('房间号已被占用，PeerJS 已分配新 ID');
+    } else if (err.type === 'peer-unavailable') {
+      alert('无法连接到该房间（房间不存在或主机已离线）');
     } else {
       alert('连接失败: ' + err.message);
     }
@@ -2070,6 +2222,12 @@ document.getElementById('btnJoinRoom').addEventListener('click', () => {
   if (!onlinePeer) { alert('连接未就绪，请稍候'); return; }
 
   onlineRole = 'client';
+
+  // 即时反馈：显示连接中状态
+  document.getElementById('lobbyCreate').style.display = 'none';
+  document.getElementById('lobbyJoin').style.display = 'none';
+  document.getElementById('lobbyInfo').style.display = 'flex';
+  document.getElementById('lobbyStatus').textContent = '正在连接房间...';
 
   const conn = onlinePeer.connect(roomId, {
     reliable: true
@@ -2266,7 +2424,36 @@ function handleNewConnection(conn) {
     return;
   }
 
+  let opened = false;
+
+  // 连接超时：30 秒内未建立则清理
+  const timeout = setTimeout(() => {
+    if (!opened) {
+      console.warn('客户端连接超时:', conn.peer);
+      try { conn.close(); } catch (e) {}
+      document.getElementById('lobbyStatus').textContent =
+        '有玩家连接超时，请重试（可能网络不兼容，建议检查防火墙或使用同一网络）';
+    }
+  }, 30000);
+
+  // 在 open 之前就监听错误和关闭事件
+  conn.on('error', (err) => {
+    clearTimeout(timeout);
+    if (!opened) {
+      console.warn('客户端连接失败:', conn.peer, err);
+      document.getElementById('lobbyStatus').textContent =
+        '有玩家连接失败（可能网络不兼容）';
+    }
+  });
+
+  conn.on('close', () => {
+    clearTimeout(timeout);
+  });
+
   conn.on('open', () => {
+    opened = true;
+    clearTimeout(timeout);
+
     const playerIndex = onlinePlayers.length;
     const color = ONLINE_COLORS[playerIndex % ONLINE_COLORS.length];
     const newPlayer = {
@@ -2343,20 +2530,36 @@ function setupHostConnHandlers(conn, playerIndex) {
 function setupClientConnection(conn) {
   onlineHostConn = conn;
 
+  let joined = false;
+
+  // 等待 joined 消息的超时
+  const joinedTimeout = setTimeout(() => {
+    if (!joined) {
+      console.warn('客机等待 joined 消息超时');
+      alert('加入房间超时：数据通道已建立但未收到主机确认。请检查网络后重试。');
+      try { conn.close(); } catch (e) {}
+      hideOnline();
+    }
+  }, 30000);
+
   conn.on('open', () => {
     document.getElementById('lobbyCreate').style.display = 'none';
     document.getElementById('lobbyJoin').style.display = 'none';
     document.getElementById('lobbyInfo').style.display = 'flex';
-    document.getElementById('lobbyStatus').textContent = '已连接到主机，等待开始...';
-    document.getElementById('playerNameRow').style.display = 'flex';
-    showOnlineNameUI();
+    document.getElementById('lobbyStatus').textContent = '已连接到主机，等待加入确认...';
+    // 等收到 joined 消息后再显示名字输入
   });
 
   conn.on('data', (data) => {
+    if (data.type === 'joined') {
+      joined = true;
+      clearTimeout(joinedTimeout);
+    }
     handleClientMessage(data);
   });
 
   conn.on('close', () => {
+    clearTimeout(joinedTimeout);
     if (onlinePhase === 'playing' || onlinePhase === 'countdown') {
       showDisconnect('主机断开连接');
     } else {
@@ -2366,6 +2569,7 @@ function setupClientConnection(conn) {
   });
 
   conn.on('error', (err) => {
+    clearTimeout(joinedTimeout);
     console.error('连接错误:', err);
     alert('连接失败: ' + err.message);
     hideOnline();
@@ -2388,6 +2592,9 @@ function handleClientMessage(data) {
       onlineMyIndex = data.playerIndex;
       updateOnlinePlayerList();
       document.getElementById('inputPlayerName').value = '';
+      document.getElementById('lobbyStatus').textContent = '已加入房间，等待开始...';
+      document.getElementById('playerNameRow').style.display = 'flex';
+      showOnlineNameUI();
       break;
 
     case 'reject':
