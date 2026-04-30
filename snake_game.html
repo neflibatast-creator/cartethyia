@@ -827,7 +827,7 @@ const PVP_BASE_LENGTH = 3;
 const PVP_RESPAWN_MS = 5000;
 const PVP_GAME_DURATION = 300;
 const PVP_NIKO_MAGNET_RADIUS = 4;
-const PVP_DEATH_DROP_RADIUS = 5;
+const PVP_DEATH_DROP_RADIUS = 3;
 
 const PVP_AVAILABLE_COLORS = [
   '#00ff66', '#4488ff', '#ff8844', '#ff44cc',
@@ -1464,28 +1464,29 @@ function pvpPickDeathDropFood() {
 
 function pvpSpawnDeathDropsAround(center, count) {
   if (!center || count <= 0) return;
-  for (let i = 0; i < count; i++) {
-    const occ = pvpOccupied();
-    let placed = false;
-    for (let t = 0; t < 24; t++) {
-      const dx = Math.floor(Math.random() * (PVP_DEATH_DROP_RADIUS * 2 + 1)) - PVP_DEATH_DROP_RADIUS;
-      const dy = Math.floor(Math.random() * (PVP_DEATH_DROP_RADIUS * 2 + 1)) - PVP_DEATH_DROP_RADIUS;
+  const cands = [];
+  for (let dx = -PVP_DEATH_DROP_RADIUS; dx <= PVP_DEATH_DROP_RADIUS; dx++) {
+    for (let dy = -PVP_DEATH_DROP_RADIUS; dy <= PVP_DEATH_DROP_RADIUS; dy++) {
       const x = center.x + dx;
       const y = center.y + dy;
       if (x < 0 || x >= COLS || y < 0 || y >= ROWS) continue;
-      if (occ.has(`${x},${y}`)) continue;
-      const type = pvpPickDeathDropFood();
-      pvp.foods.push({
-        x, y, type,
-        expiresAt: Date.now() + type.lifetime + (Math.random() - 0.5) * 2000
-      });
-      placed = true;
-      break;
+      const dist = Math.abs(dx) + Math.abs(dy); // 曼哈顿距离，优先中心附近
+      cands.push({x, y, dist});
     }
-    if (!placed) {
-      // 兜底：全图随机落点
-      pvpSpawnFood();
-    }
+  }
+  cands.sort((a, b) => a.dist - b.dist || (Math.random() - 0.5));
+
+  let dropped = 0;
+  for (const pos of cands) {
+    if (dropped >= count) break;
+    const occ = pvpOccupied();
+    if (occ.has(`${pos.x},${pos.y}`)) continue;
+    const type = pvpPickDeathDropFood();
+    pvp.foods.push({
+      x: pos.x, y: pos.y, type,
+      expiresAt: Date.now() + type.lifetime + (Math.random() - 0.5) * 2000
+    });
+    dropped++;
   }
 }
 
