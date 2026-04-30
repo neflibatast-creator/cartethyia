@@ -258,6 +258,18 @@
   #pvpInfoBar .pvp-effect.active { display: block; }
   #pvpTimer { color: #ffd700; font-size: 1.1rem; font-weight: bold; min-width: 60px; text-align: center; }
   #pvpTimer.urgent { color: #ff4444; animation: blink 0.5s infinite; }
+  #pvpRageHint {
+    display: none;
+    color: #ff6644;
+    font-size: 0.85rem;
+    font-weight: bold;
+    padding: 2px 8px;
+    border: 1px solid rgba(255, 102, 68, 0.5);
+    border-radius: 999px;
+    background: rgba(255, 80, 40, 0.18);
+    box-shadow: 0 0 8px rgba(255, 90, 50, 0.35);
+  }
+  #pvpRageHint.active { display: inline-block; animation: blink 0.7s infinite; }
   @keyframes blink { 50% { opacity: 0.4; } }
 
 
@@ -679,6 +691,7 @@
     <div class="stat">P1(WASD/F技能): <span class="score-val" id="pvpScoreLive1" style="color:#00ff66;">0</span></div>
     <div class="stat">P2(↑↓←→/左Ctrl技能): <span class="score-val" id="pvpScoreLive2" style="color:#4488ff;">0</span></div>
     <span id="pvpTimer">05:00</span>
+    <span id="pvpRageHint">狂暴模式 12s</span>
     <div class="timer-stat shield-stat" id="pvpShield1">P1护盾 <span id="pvpShieldVal1">0.0</span>s</div>
     <div class="timer-stat speed-stat" id="pvpSpeed1">P1加速 <span id="pvpSpeedVal1">0.0</span>s</div>
     <span class="skill-indicator" id="pvpSkillInd1"><span class="skill-icon none" id="pvpSkillIcon1"></span><span id="pvpSkillStatus1" style="font-size:0.65rem;min-height:14px;"></span></span>
@@ -828,6 +841,9 @@ const PVP_RESPAWN_MS = 5000;
 const PVP_GAME_DURATION = 300;
 const PVP_NIKO_MAGNET_RADIUS = 4;
 const PVP_DEATH_DROP_RADIUS = 3;
+const PVP_RAGE_INTERVAL_MS = 120000;
+const PVP_RAGE_DURATION_MS = 12000;
+const PVP_FOOD_DROP_CHANCE_NORMAL = 0.12;
 
 const PVP_AVAILABLE_COLORS = [
   '#00ff66', '#4488ff', '#ff8844', '#ff44cc',
@@ -1161,6 +1177,9 @@ let pvpSkillUses1 = 0, pvpSkillUses2 = 0;
 let pvpSkillUntil1 = 0, pvpSkillUntil2 = 0;
 let pvpDead1 = 0, pvpDead2 = 0;
 let pvpDeathLen1 = 0, pvpDeathLen2 = 0;
+let pvpRageUntil = 0;
+let pvpNextRageAt = 0;
+let pvpLastAmbientDropAt = 0;
 let pvpLastMove1 = 0, pvpLastMove2 = 0;
 
 let pvp = {
@@ -1401,6 +1420,10 @@ function pvpStartGame() {
     pvpSkillUses2 = sd2 ? sd2.maxUses : 0;
   } else { pvpSkillUses2 = 0; }
   pvpDead1 = pvpDead2 = pvpDeathLen1 = pvpDeathLen2 = pvpLastMove1 = pvpLastMove2 = 0;
+  pvpRageUntil = 0;
+  pvpNextRageAt = Date.now() + PVP_RAGE_INTERVAL_MS;
+  pvpLastAmbientDropAt = 0;
+  updatePvpRageUI(Date.now());
   pvpTimeLeft = PVP_GAME_DURATION;
 
   document.getElementById('pvpScoreLive1').textContent = '0';
@@ -1444,12 +1467,22 @@ function formatPvpTime(s) {
   return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
 }
 
-function pvpPickDeathDropFood(deathScore) {
-  // 稀有度按死亡积分的 1/3 限制：积分越低，可掉落的食物越普通
-  const rarityBudget = Math.floor(deathScore / 3);
-  let candidates = FOOD_TYPES.filter(ft => ft.points <= rarityBudget);
-  if (!candidates.length) candidates = FOOD_TYPES.filter(ft => ft.points <= 10);
-  if (!candidates.length) candidates = [FOOD_TYPES[0]];
+function updatePvpRageUI(now) {
+  const el = document.getElementById('pvpRageHint');
+  if (!el) return;
+  if (now < pvpRageUntil) {
+    const left = Math.max(0, Math.ceil((pvpRageUntil - now) / 1000));
+    el.textContent = `狂暴模式 ${left}s`;
+    el.classList.add('active');
+  } else {
+    el.classList.remove('active');
+  }
+}
+
+function pvpPickDeathDropFood(remainingPointsBudget) {
+  // 死亡掉落仅包含“积分食物”（正分），且单个食物分值不能超过剩余预算
+  let candidates = FOOD_TYPES.filter(ft => ft.points > 0 && ft.points <= remainingPointsBudget);
+  if (!candidates.length) return null;
 
   const weighted = candidates.map(ft => ({ ft, w: Math.max(0.0001, ft.prob) }));
   const total = weighted.reduce((sum, item) => sum + item.w, 0);
@@ -1458,11 +1491,14 @@ function pvpPickDeathDropFood(deathScore) {
     r -= item.w;
     if (r <= 0) return item.ft;
   }
-  return candidates[0];
+  return candidates[0] || null;
 }
 
-function pvpSpawnDeathDropsAround(center, count, deathScore) {
-  if (!center || count <= 0) return;
+function pvpSpawnDeathDropsAround(center, deathScore) {
+  if (!center || deathScore <= 0) return;
+  const totalDropPointsBudget = Math.floor(deathScore / 3);
+  if (totalDropPointsBudget <= 0) return;
+
   const cands = [];
   for (let dx = -PVP_DEATH_DROP_RADIUS; dx <= PVP_DEATH_DROP_RADIUS; dx++) {
     for (let dy = -PVP_DEATH_DROP_RADIUS; dy <= PVP_DEATH_DROP_RADIUS; dy++) {
@@ -1475,17 +1511,19 @@ function pvpSpawnDeathDropsAround(center, count, deathScore) {
   }
   cands.sort((a, b) => a.dist - b.dist || (Math.random() - 0.5));
 
-  let dropped = 0;
+  let usedPoints = 0;
   for (const pos of cands) {
-    if (dropped >= count) break;
+    const remaining = totalDropPointsBudget - usedPoints;
+    if (remaining <= 0) break;
     const occ = pvpOccupied();
     if (occ.has(`${pos.x},${pos.y}`)) continue;
-    const type = pvpPickDeathDropFood(deathScore);
+    const type = pvpPickDeathDropFood(remaining);
+    if (!type) break;
     pvp.foods.push({
       x: pos.x, y: pos.y, type,
       expiresAt: Date.now() + type.lifetime + (Math.random() - 0.5) * 2000
     });
-    dropped++;
+    usedPoints += type.points;
   }
 }
 
@@ -1504,8 +1542,7 @@ function pvpKill(n) {
     pvpDeathLen1 = deathLen;
     pvpDead1 = Date.now() + PVP_RESPAWN_MS;
     pvp.snake1 = [];
-    const dropCount = deathScore > 0 ? Math.max(1, Math.floor(deathScore / 3)) : 0;
-    pvpSpawnDeathDropsAround(deathHead, dropCount, deathScore);
+    pvpSpawnDeathDropsAround(deathHead, deathScore);
   } else {
     const deathSnake = [...pvp.snake2];
     const deathLen = deathSnake.length;
@@ -1520,8 +1557,7 @@ function pvpKill(n) {
     pvpDeathLen2 = deathLen;
     pvpDead2 = Date.now() + PVP_RESPAWN_MS;
     pvp.snake2 = [];
-    const dropCount = deathScore > 0 ? Math.max(1, Math.floor(deathScore / 3)) : 0;
-    pvpSpawnDeathDropsAround(deathHead, dropCount, deathScore);
+    pvpSpawnDeathDropsAround(deathHead, deathScore);
   }
 }
 
@@ -1545,9 +1581,11 @@ function pvpCheckRespawns() {
 
 function pvpEnd() {
   pvp.gameOver = true; pvpPhase = 'over';
+  pvpRageUntil = 0;
   clearInterval(pvpGameLoop); clearInterval(pvpTimerInterval);
   document.getElementById('pvpPauseOverlay').classList.remove('active');
   document.getElementById('pvpTimer').classList.remove('urgent');
+  updatePvpRageUI(Date.now());
 
   let w; if (pvp.score1 > pvp.score2) w = 1; else if (pvp.score2 > pvp.score1) w = 2; else w = 0;
   document.getElementById('pvpFinalScore1').textContent = pvp.score1;
@@ -1588,9 +1626,17 @@ function pvpSpawnFood() {
   return true;
 }
 
-function pvpRefill() {
+function pvpRefill(now, rageMode) {
   pvp.foods = pvp.foods.filter(f => f.expiresAt > Date.now());
-  for (let n = TARGET_FOOD_COUNT - pvp.foods.length; n > 0; n--) if (!pvpSpawnFood()) break;
+  const targetFoodCount = TARGET_FOOD_COUNT * (rageMode ? 3 : 1);
+  for (let n = targetFoodCount - pvp.foods.length; n > 0; n--) if (!pvpSpawnFood()) break;
+
+  // 环境掉落：狂暴模式概率翻倍
+  if (now - pvpLastAmbientDropAt >= 400) {
+    const chance = rageMode ? (PVP_FOOD_DROP_CHANCE_NORMAL * 2) : PVP_FOOD_DROP_CHANCE_NORMAL;
+    if (Math.random() < chance) pvpSpawnFood();
+    pvpLastAmbientDropAt = now;
+  }
 }
 
 // ── PvP tick (individual speed) ───────────────────
@@ -1599,7 +1645,13 @@ function pvpTick() {
   if (pvp.gameOver || pvp.paused || pvpPhase !== 'playing') return;
 
   const now = Date.now();
-  pvpRefill();
+  if (pvpNextRageAt > 0 && now >= pvpNextRageAt) {
+    pvpRageUntil = now + PVP_RAGE_DURATION_MS;
+    pvpNextRageAt += PVP_RAGE_INTERVAL_MS;
+  }
+  const rageMode = now < pvpRageUntil;
+  updatePvpRageUI(now);
+  pvpRefill(now, rageMode);
   pvpCheckRespawns();
 
   const alive1 = !pvpDead1 && pvp.snake1.length > 0;
