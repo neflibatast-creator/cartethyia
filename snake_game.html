@@ -1589,8 +1589,12 @@ function pvpMovePlayer(n) {
   const otherSnake = isP1 ? pvp.snake2 : pvp.snake1;
   if (isP1) pvp.dir1 = pvp.nextDir1; else pvp.dir2 = pvp.nextDir2;
   const dir = isP1 ? pvp.dir1 : pvp.dir2;
+  const invisActive = isP1
+    ? (pvpSkillUntil1 > Date.now() && pvpSkillActive1 && pvpSkillActive1.skillId === 'invisibility')
+    : (pvpSkillUntil2 > Date.now() && pvpSkillActive2 && pvpSkillActive2.skillId === 'invisibility');
   const skillShield = isP1 ? (pvpSkillUntil1 > Date.now() && pvpSkillActive1 && pvpSkillActive1.skillId === 'shield') : (pvpSkillUntil2 > Date.now() && pvpSkillActive2 && pvpSkillActive2.skillId === 'shield');
-  const shielded = isP1 ? (pvpShield1 > Date.now() || skillShield) : (pvpShield2 > Date.now() || skillShield);
+  // mONESY 隐身期间：视为无敌（但不免疫撞墙/撞对手）
+  const shielded = invisActive || (isP1 ? (pvpShield1 > Date.now() || skillShield) : (pvpShield2 > Date.now() || skillShield));
   const otherAlive = isP1 ? (!pvpDead2 && pvp.snake2.length > 0) : (!pvpDead1 && pvp.snake1.length > 0);
 
   const head = snake[0], nh = {x: head.x, y: head.y};
@@ -1602,11 +1606,13 @@ function pvpMovePlayer(n) {
   const ei = pvp.foods.findIndex(f => f.x === nh.x && f.y === nh.y);
   const eating = ei !== -1;
 
-  if (!shielded) {
-    // Self collision
+  // 隐身期间：免疫自撞；隐身外：保持原有自撞判死
+  if (!invisActive) {
     const selfBody = eating ? snake : snake.slice(0, -1);
     if (selfBody.some(s => s.x === nh.x && s.y === nh.y)) { pvpKill(n); return; }
-    // Cross collision
+  }
+  // 对手碰撞仍然致命（隐身不提供穿模能力）
+  if (!shielded) {
     if (otherAlive && otherSnake.some(s => s.x === nh.x && s.y === nh.y)) { pvpKill(n); return; }
   }
 
@@ -1796,12 +1802,12 @@ function drawPvp() {
         pvpCtx.fillStyle = c; pvpCtx.fillRect(s.x * GRID + 1, s.y * GRID + 1, GRID - 2, GRID - 2);
       });
     } else {
-      // 隐身：仅显示微弱轮廓
-      pvp.snake1.forEach((s, i) => {
-        const alpha = Math.max(0.08, 0.2 - i * 0.01);
-        pvpCtx.fillStyle = `rgba(${rgb1.r},${rgb1.g},${rgb1.b},${alpha})`;
-        pvpCtx.fillRect(s.x * GRID + 1, s.y * GRID + 1, GRID - 2, GRID - 2);
-      });
+      // 隐身：仅显示首段第一个方块（头部），其余完全不可见（包括自己）
+      const head = pvp.snake1[0];
+      if (head) {
+        pvpCtx.fillStyle = pvpColor1;
+        pvpCtx.fillRect(head.x * GRID + 1, head.y * GRID + 1, GRID - 2, GRID - 2);
+      }
     }
     if (totalShield1) { const p = 0.5 + 0.5 * Math.sin(now / 150); pvpCtx.strokeStyle = `rgba(255,184,0,${0.35+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffb800'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake1.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
     if (bo1 && !totalShield1) { const p = 0.5 + 0.5 * Math.sin(now / 100); pvpCtx.strokeStyle = `rgba(255,220,0,${0.3+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffdd00'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake1.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
@@ -1822,12 +1828,12 @@ function drawPvp() {
         pvpCtx.fillStyle = c; pvpCtx.fillRect(s.x * GRID + 1, s.y * GRID + 1, GRID - 2, GRID - 2);
       });
     } else {
-      // 隐身：仅显示微弱轮廓
-      pvp.snake2.forEach((s, i) => {
-        const alpha = Math.max(0.08, 0.2 - i * 0.01);
-        pvpCtx.fillStyle = `rgba(${rgb2.r},${rgb2.g},${rgb2.b},${alpha})`;
-        pvpCtx.fillRect(s.x * GRID + 1, s.y * GRID + 1, GRID - 2, GRID - 2);
-      });
+      // 隐身：仅显示首段第一个方块（头部），其余完全不可见（包括自己）
+      const head = pvp.snake2[0];
+      if (head) {
+        pvpCtx.fillStyle = pvpColor2;
+        pvpCtx.fillRect(head.x * GRID + 1, head.y * GRID + 1, GRID - 2, GRID - 2);
+      }
     }
     if (totalShield2) { const p = 0.5 + 0.5 * Math.sin(now / 150); pvpCtx.strokeStyle = `rgba(255,184,0,${0.35+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffb800'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake2.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
     if (bo2 && !totalShield2) { const p = 0.5 + 0.5 * Math.sin(now / 100); pvpCtx.strokeStyle = `rgba(255,220,0,${0.3+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffdd00'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake2.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
