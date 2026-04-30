@@ -1480,8 +1480,13 @@ function updatePvpRageUI(now) {
 }
 
 function pvpPickDeathDropFood(remainingPointsBudget) {
-  // 死亡掉落仅包含“积分食物”（正分），且单个食物分值不能超过剩余预算
-  let candidates = FOOD_TYPES.filter(ft => ft.points > 0 && ft.points <= remainingPointsBudget);
+  // 死亡掉落仅包含“正常积分果实”：排除炸弹/护盾/加速等特殊食物
+  let candidates = FOOD_TYPES.filter(ft =>
+    ft.points > 0 &&
+    !ft.shield &&
+    !ft.speedBoost &&
+    ft.points <= remainingPointsBudget
+  );
   if (!candidates.length) return null;
 
   const weighted = candidates.map(ft => ({ ft, w: Math.max(0.0001, ft.prob) }));
@@ -1505,24 +1510,40 @@ function pvpSpawnDeathDropsAround(center, deathScore) {
       const x = center.x + dx;
       const y = center.y + dy;
       if (x < 0 || x >= COLS || y < 0 || y >= ROWS) continue;
-      const dist = Math.abs(dx) + Math.abs(dy); // 曼哈顿距离，优先中心附近
+      const dist = Math.abs(dx) + Math.abs(dy);
       cands.push({x, y, dist});
     }
   }
-  cands.sort((a, b) => a.dist - b.dist || (Math.random() - 0.5));
+
+  // 随机近点散落：优先近距离，但不按矩形顺序填充
+  cands.sort((a, b) => a.dist - b.dist);
 
   let usedPoints = 0;
-  for (const pos of cands) {
+  const usedPos = new Set();
+  let attempts = 0;
+  const maxAttempts = Math.max(30, cands.length * 3);
+  while (attempts < maxAttempts) {
+    attempts++;
     const remaining = totalDropPointsBudget - usedPoints;
     if (remaining <= 0) break;
+
+    // 近距离优先采样（前半圈权重更高）
+    const pickMax = Math.max(1, Math.floor(cands.length * 0.6));
+    const pos = cands[Math.floor(Math.random() * pickMax)];
+    if (!pos) break;
+    const key = `${pos.x},${pos.y}`;
+    if (usedPos.has(key)) continue;
+
     const occ = pvpOccupied();
-    if (occ.has(`${pos.x},${pos.y}`)) continue;
+    if (occ.has(key)) continue;
+
     const type = pvpPickDeathDropFood(remaining);
     if (!type) break;
     pvp.foods.push({
       x: pos.x, y: pos.y, type,
       expiresAt: Date.now() + type.lifetime + (Math.random() - 0.5) * 2000
     });
+    usedPos.add(key);
     usedPoints += type.points;
   }
 }
