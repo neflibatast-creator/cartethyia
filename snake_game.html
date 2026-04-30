@@ -2084,19 +2084,29 @@ function initPeer(customId) {
   // 使用自定义 ID 或生成随机 Peer ID
   const peerId = customId || ('snake-' + Math.random().toString(36).substring(2, 10));
   onlinePeer = new Peer(peerId, {
-    host: '0.peerjs.com',
-    port: 443,
-    secure: true,
-    debug: 0,
-    config: {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
-      ]
-    }
-  });
-
+      host: '0.peerjs.com',
+      port: 443,
+      secure: true,
+      debug: 0,
+      config: {
+        iceServers:[
+          // 这是导航仪（STUN）
+          { urls: 'stun:stun.qq.com:3478' },
+          { urls: 'stun:stun.miwifi.com:3478' },
+          // 下面这个就是免费的中转快递员（TURN）
+          {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          }
+        ]
+      }
+    });
   onlinePeer.on('open', (id) => {
     console.log('PeerJS 已连接, ID:', id);
     // 如果自定义 ID 已被占用，PeerJS 会分配一个新 ID
