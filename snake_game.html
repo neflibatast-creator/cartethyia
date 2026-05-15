@@ -809,7 +809,6 @@
 </div>
 </div>
 
-<script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
 <script>
 // ═══════════════════════════════════════════════════
 //  CONSTANTS
@@ -2178,6 +2177,13 @@ document.addEventListener('keydown', e => {
   if (activePage === 'online') {
     if (onlinePhase !== 'playing') return;
 
+    // F 键：使用技能
+    if (e.key === 'f' || e.key === 'F') {
+      sendOnline({ type: 'useSkill' });
+      e.preventDefault();
+      return;
+    }
+
     // 方向键映射（WASD + 方向键 都可使用）
     const dirMap = {
       arrowup: 'UP', w: 'UP',
@@ -2188,38 +2194,9 @@ document.addEventListener('keydown', e => {
     const newDir = dirMap[key];
     if (!newDir) return;
 
-    // F 键：使用技能
-    if (e.key === 'f' || e.key === 'F') {
-      if (onlineRole === 'host') {
-        // 主机直接处理自己的技能
-        hostHandleUseSkill(0); // 主机的 playerIndex 始终为 0
-        e.preventDefault();
-      } else if (onlineRole === 'client') {
-        // 客机发送技能使用请求给主机
-        if (onlineHostConn && onlinePhase === 'playing') {
-          try {
-            onlineHostConn.send({ type: 'useSkill', playerId: onlineMyIndex });
-          } catch(err) {}
-        }
-        e.preventDefault();
-      }
-      return;
-    }
-
-    if (onlineRole === 'host') {
-      // 主机: 直接更新自己的蛇的方向
-      if (onlineAlive[0] && onlineSnakes[0] && onlineSnakes[0].length > 0) {
-        if (opposites[newDir.toLowerCase()] !== onlineDirs[0]) {
-          onlineNextDirs[0] = newDir;
-          e.preventDefault();
-        }
-      }
-    } else if (onlineRole === 'client') {
-      // 客机: 发送方向给主机
-      if (onlineAlive[onlineMyIndex] && onlineSnakes[onlineMyIndex] && onlineSnakes[onlineMyIndex].length > 0) {
-        onlineSendDir(newDir);
-        e.preventDefault();
-      }
+    if (onlineAlive[onlineMyIndex] && onlineSnakes[onlineMyIndex] && onlineSnakes[onlineMyIndex].length > 0) {
+      onlineSendDir(newDir);
+      e.preventDefault();
     }
   }
 });
@@ -2274,9 +2251,10 @@ onlineCanvas.width = COLS * ONLINE_GRID;
 onlineCanvas.height = ROWS * ONLINE_GRID;
 
 let onlineRole = null;            // 'host' | 'client'
-let onlinePeer = null;            // PeerJS 实例
-let onlineHostConn = null;        // 客机连向主机的 DataConnection
-let onlineConns = null;           // 主机端: Map<peerId, { conn, playerIndex }>
+let onlineSocket = null;          // WebSocket connection to the room server
+let onlineRoomId = '';
+let onlineHostConn = null;        // legacy PeerJS path, kept null while WebSocket mode is active
+let onlineConns = null;           // legacy PeerJS path, kept null while WebSocket mode is active
 let onlineMyIndex = 0;            // 自己在 players 数组中的索引
 let onlinePlayers = [];           // [{ name, color, peerId, alive, char }]
 let onlinePhase = 'idle';         // idle | lobby | countdown | playing | over
@@ -2314,8 +2292,6 @@ function showOnline() {
   pvpPage.classList.remove('active');
   onlinePage.classList.add('active');
   activePage = 'online';
-  // 初始化 PeerJS
-  initPeer();
   // 显示大厅
   resetOnlineLobby();
   drawOnlineGrid();
@@ -2332,59 +2308,49 @@ function hideOnline() {
 document.getElementById('btnOnline').addEventListener('click', showOnline);
 document.getElementById('onlineBackBtn').addEventListener('click', hideOnline);
 
-// ── PeerJS 初始化 ────────────────────────────────────
+// ── WebSocket connection ────────────────────────────
 
-function initPeer(customId) {
-  if (onlinePeer) {
-    onlinePeer.destroy();
-    onlinePeer = null;
+function getOnlineServerUrl() {
+  const override = new URLSearchParams(location.search).get('server');
+  if (override) return override;
+  if (location.protocol === 'file:') return 'ws://localhost:3000';
+  return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+}
+
+function sendOnline(data) {
+  if (!onlineSocket || onlineSocket.readyState !== WebSocket.OPEN) return false;
+  onlineSocket.send(JSON.stringify(data));
+  return true;
+}
+
+function connectOnlineServer(onOpen) {
+  cleanupOnlineSocket();
+  onlineSocket = new WebSocket(getOnlineServerUrl());
+  onlineSocket.addEventListener('open', onOpen);
+  onlineSocket.addEventListener('message', (event) => {
+    let data;
+    try { data = JSON.parse(event.data); } catch (e) { return; }
+    if (data.type === 'disconnect') {
+      showDisconnect(data.message || '连接已断开');
+      return;
+    }
+    handleClientMessage(data);
+  });
+  onlineSocket.addEventListener('close', () => {
+    if (activePage === 'online' && (onlinePhase === 'playing' || onlinePhase === 'countdown')) {
+      showDisconnect('服务器连接已断开');
+    }
+  });
+  onlineSocket.addEventListener('error', () => {
+    alert('无法连接联机服务器。请先运行 npm start，并用服务器地址打开页面。');
+  });
+}
+
+function cleanupOnlineSocket() {
+  if (onlineSocket) {
+    try { onlineSocket.close(); } catch(e) {}
+    onlineSocket = null;
   }
-  // 使用自定义 ID 或生成随机 Peer ID
-  const peerId = customId || ('snake-' + Math.random().toString(36).substring(2, 10));
-  onlinePeer = new Peer(peerId, {
-      host: '0.peerjs.com',
-      port: 443,
-      secure: true,
-      debug: 0,
-      config: {
-        iceServers:[
-          // 这是导航仪（STUN）
-          { urls: 'stun:stun.qq.com:3478' },
-          { urls: 'stun:stun.miwifi.com:3478' },
-          // 下面这个就是免费的中转快递员（TURN）
-          {
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          },
-          {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          }
-        ]
-      }
-    });
-  onlinePeer.on('open', (id) => {
-    console.log('PeerJS 已连接, ID:', id);
-    // 如果自定义 ID 已被占用，PeerJS 会分配一个新 ID
-    if (customId && id !== customId) {
-      document.getElementById('roomIdText').textContent = id;
-      document.getElementById('lobbyStatus').textContent = '自定义房间号已被占用，已分配新房间号';
-    }
-  });
-
-  onlinePeer.on('error', (err) => {
-    console.error('PeerJS 错误:', err);
-    if (err.type === 'unavailable-id') {
-      // 房间号已被占用，PeerJS 会自动分配新 ID，无需弹窗打断
-      console.warn('房间号已被占用，PeerJS 已分配新 ID');
-    } else if (err.type === 'peer-unavailable') {
-      alert('无法连接到该房间（房间不存在或主机已离线）');
-    } else {
-      alert('连接失败: ' + err.message);
-    }
-  });
 }
 
 // ── Lobby UI ────────────────────────────────────────
@@ -2393,8 +2359,7 @@ function resetOnlineLobby() {
   onlinePhase = 'idle';
   onlineRole = null;
   onlinePlayers = [];
-  onlineConns = null;
-  onlineHostConn = null;
+  onlineRoomId = '';
   onlineMyIndex = 0;
 
   document.getElementById('lobbyCreate').style.display = 'flex';
@@ -2431,54 +2396,15 @@ function resetOnlineLobby() {
 // ── 创建房间（主机）─────────────────────────────────
 
 document.getElementById('btnCreateRoom').addEventListener('click', () => {
-  if (!onlinePeer) {
-    alert('P2P 连接未就绪，请稍候再试');
-    return;
-  }
-  // 支持自定义房间号
   const customId = document.getElementById('inputCustomRoomId').value.trim();
-  if (customId) {
-    // 重建 Peer 实例使用自定义 ID
-    initPeer(customId);
-  }
-
   onlineRole = 'host';
-  onlineConns = new Map();
   onlineMyIndex = 0;
-
-  // 主机先把自己加入玩家列表（peerId 稍后在 open 事件中修正）
-  onlinePlayers = [{
-    name: '',
-    color: ONLINE_COLORS[0],
-    peerId: '',
-    alive: true,
-    char: 'default'
-  }];
-
-  // 等待 PeerJS 连接就绪后显示房间号
-  const showRoom = () => {
-    document.getElementById('lobbyCreate').style.display = 'none';
-    document.getElementById('lobbyJoin').style.display = 'none';
-    document.getElementById('lobbyInfo').style.display = 'flex';
-    document.getElementById('roomIdText').textContent = onlinePeer.id;
-    document.getElementById('lobbyStatus').textContent = '等待玩家加入...';
-    document.getElementById('btnStartGame').style.display = 'none';
-    onlinePlayers[0].peerId = onlinePeer.id;
-    updateOnlinePlayerList();
-    showOnlineNameUI();
-  };
-
-  if (onlinePeer.id) {
-    showRoom();
-  } else {
-    onlinePeer.on('open', () => {
-      showRoom();
-    });
-  }
-
-  // 监听到来的连接（客机加入）
-  onlinePeer.on('connection', (conn) => {
-    handleNewConnection(conn);
+  document.getElementById('lobbyCreate').style.display = 'none';
+  document.getElementById('lobbyJoin').style.display = 'none';
+  document.getElementById('lobbyInfo').style.display = 'flex';
+  document.getElementById('lobbyStatus').textContent = '正在创建房间...';
+  connectOnlineServer(() => {
+    sendOnline({ type: 'create', roomId: customId });
   });
 });
 
@@ -2487,7 +2413,6 @@ document.getElementById('btnCreateRoom').addEventListener('click', () => {
 document.getElementById('btnJoinRoom').addEventListener('click', () => {
   const roomId = document.getElementById('inputRoomId').value.trim();
   if (!roomId) { alert('请输入房间号'); return; }
-  if (!onlinePeer) { alert('连接未就绪，请稍候'); return; }
 
   onlineRole = 'client';
 
@@ -2496,12 +2421,9 @@ document.getElementById('btnJoinRoom').addEventListener('click', () => {
   document.getElementById('lobbyJoin').style.display = 'none';
   document.getElementById('lobbyInfo').style.display = 'flex';
   document.getElementById('lobbyStatus').textContent = '正在连接房间...';
-
-  const conn = onlinePeer.connect(roomId, {
-    reliable: true
+  connectOnlineServer(() => {
+    sendOnline({ type: 'join', roomId: roomId });
   });
-
-  setupClientConnection(conn);
 });
 
 // ── 玩家取名 + 颜色/角色选择 ─────────────────────────
@@ -2516,10 +2438,7 @@ function showOnlineNameUI() {
     onlinePlayers[onlineMyIndex].name = name;
     document.getElementById('playerNameRow').style.display = 'none';
     updateOnlinePlayerList();
-    broadcastPlayerList();
-    if (onlineRole === 'client' && onlineHostConn) {
-      onlineHostConn.send({ type: 'setName', name: name });
-    }
+    sendOnline({ type: 'setName', name: name });
     // 名字确认后显示颜色选择
     showOnlineColorPicker();
   };
@@ -2573,10 +2492,7 @@ function buildOnlineColorPicker() {
 function selectOnlineColor(color) {
   onlinePlayers[onlineMyIndex].color = color;
   updateOnlinePlayerList();
-  broadcastPlayerList();
-  if (onlineRole === 'client' && onlineHostConn) {
-    onlineHostConn.send({ type: 'setColor', color: color });
-  }
+  sendOnline({ type: 'setColor', color: color });
   // 选择颜色后自动进入角色选择
   showOnlineCharPicker();
 }
@@ -2618,20 +2534,13 @@ function selectOnlineChar(charId) {
   onlinePickerStep = 3;
   document.getElementById('onlinePickerHint').textContent = '✓ 选择完成';
   updateOnlinePlayerList();
-  broadcastPlayerList();
-  if (onlineRole === 'client' && onlineHostConn) {
-    onlineHostConn.send({ type: 'setChar', char: charId });
-  }
+  sendOnline({ type: 'setChar', char: charId });
   checkHostCanStart();
 }
 
 // 主机广播玩家列表给所有客机
 function broadcastPlayerList() {
-  if (onlineRole !== 'host' || !onlineConns) return;
-  const list = onlinePlayers.map(p => ({ name: p.name, color: p.color, char: p.char, peerId: p.peerId }));
-  onlineConns.forEach((data) => {
-    try { data.conn.send({ type: 'playerList', players: list }); } catch(e) {}
-  });
+  // Player lists are now owned and broadcast by the WebSocket server.
 }
 
 // 检查主机是否可以开始游戏
@@ -2858,9 +2767,15 @@ function handleClientMessage(data) {
         alive: true
       }));
       onlineMyIndex = data.playerIndex;
+      onlineRoomId = data.roomId || onlineRoomId;
+      document.getElementById('roomIdText').textContent = onlineRoomId;
       updateOnlinePlayerList();
       document.getElementById('inputPlayerName').value = '';
-      document.getElementById('lobbyStatus').textContent = '已加入房间，等待开始...';
+      document.getElementById('lobbyCreate').style.display = 'none';
+      document.getElementById('lobbyJoin').style.display = 'none';
+      document.getElementById('lobbyInfo').style.display = 'flex';
+      document.getElementById('lobbyStatus').textContent =
+        onlineRole === 'host' ? '等待玩家加入...' : '已加入房间，等待开始...';
       document.getElementById('playerNameRow').style.display = 'flex';
       showOnlineNameUI();
       break;
@@ -2878,7 +2793,9 @@ function handleClientMessage(data) {
         peerId: p.peerId,
         alive: onlinePlayers[i] ? onlinePlayers[i].alive : true
       }));
+      if (Number.isInteger(data.playerIndex)) onlineMyIndex = data.playerIndex;
       updateOnlinePlayerList();
+      checkHostCanStart();
       break;
 
     case 'countdown':
@@ -3001,26 +2918,7 @@ document.getElementById('btnStartGame').addEventListener('click', () => {
 });
 
 function startHostCountdown() {
-  onlineCountdownSec = 3;
-  onlinePhase = 'countdown';
-
-  // 广播倒计时给所有客机
-  broadcastToAll({ type: 'countdown', seconds: onlineCountdownSec });
-  document.getElementById('lobbyCountdown').style.display = 'block';
-  document.getElementById('lobbyCountdown').textContent = '游戏开始倒计时: ' + onlineCountdownSec;
-  document.getElementById('lobbyInfo').style.display = 'none';
-  document.getElementById('onlineBackBtn').style.display = 'none';
-
-  clearInterval(onlineCountdownTimer);
-  onlineCountdownTimer = setInterval(() => {
-    onlineCountdownSec--;
-    document.getElementById('lobbyCountdown').textContent = '游戏开始倒计时: ' + onlineCountdownSec;
-    broadcastToAll({ type: 'countdown', seconds: onlineCountdownSec });
-    if (onlineCountdownSec <= 0) {
-      clearInterval(onlineCountdownTimer);
-      startHostGame();
-    }
-  }, 1000);
+  sendOnline({ type: 'start' });
 }
 
 function startHostGame() {
@@ -3551,21 +3449,8 @@ function showOnlineGameOver(data) {
 
 document.getElementById('onlineRestartBtn').addEventListener('click', () => {
   if (onlineRole !== 'host') return;
-  // 重置游戏状态
-  onlinePhase = 'playing';
+  sendOnline({ type: 'restart' });
   document.getElementById('onlineOverlay').classList.remove('active');
-  document.getElementById('onlineTimer').textContent = '05:00';
-  document.getElementById('onlineTimer').classList.remove('urgent');
-
-  onlineSnakes = [];
-  onlineFoods = [];
-  onlineTimeLeft = PVP_GAME_DURATION;
-
-  // 通知客机重开
-  broadcastToAll({ type: 'restart' });
-
-  // 重新初始化
-  startHostGame();
 });
 
 document.getElementById('onlineOverlayBackBtn').addEventListener('click', () => {
@@ -3585,24 +3470,10 @@ function cleanupOnline() {
   clearInterval(onlineGameLoop);
   clearInterval(onlineSyncTimer);
   clearInterval(onlineCountdownTimer);
-  if (onlineConns) {
-    onlineConns.forEach((data) => {
-      try { data.conn.close(); } catch(e) {}
-    });
-    onlineConns = null;
-  }
-  if (onlineHostConn) {
-    try { onlineHostConn.close(); } catch(e) {}
-    onlineHostConn = null;
-  }
-  if (onlinePeer) {
-    // 移除所有监听器以避免重复触发
-    onlinePeer.off('open');
-    onlinePeer.off('connection');
-    onlinePeer.off('error');
-  }
+  cleanupOnlineSocket();
   onlinePhase = 'idle';
   onlineRole = null;
+  onlineRoomId = '';
   onlinePlayers = [];
 }
 
@@ -3695,10 +3566,8 @@ function formatOnlineTime(s) {
 // ── 客机输入: 发送方向给主机 ──────────────────────────
 
 function onlineSendDir(dir) {
-  if (!onlineHostConn || onlinePhase !== 'playing') return;
-  try {
-    onlineHostConn.send({ type: 'dir', dir: dir });
-  } catch(e) {}
+  if (onlinePhase !== 'playing') return;
+  sendOnline({ type: 'dir', dir: dir });
 }
 
 // ── 绘制联机游戏 ────────────────────────────────────
