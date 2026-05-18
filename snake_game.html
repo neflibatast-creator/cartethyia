@@ -630,6 +630,304 @@
 
   /* ── Back button area ─────────────────────────── */
   .back-row { margin-top: 12px; }
+
+  /* ── Neon arcade redesign ─────────────────────── */
+  :root {
+    --bg: #070b18;
+    --panel: rgba(13, 20, 42, 0.82);
+    --panel-strong: rgba(16, 27, 56, 0.94);
+    --line: rgba(138, 170, 255, 0.18);
+    --text: #edf6ff;
+    --muted: #8da0ba;
+    --green: #24f7a3;
+    --blue: #4aa8ff;
+    --red: #ff6b4a;
+    --gold: #ffd166;
+    --purple: #c86bff;
+  }
+
+  body {
+    color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    background:
+      radial-gradient(circle at 18% 12%, rgba(36,247,163,0.13), transparent 28%),
+      radial-gradient(circle at 82% 18%, rgba(74,168,255,0.14), transparent 30%),
+      linear-gradient(180deg, #080d1c 0%, #060814 52%, #04050c 100%);
+    padding: 20px;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: 42px 42px;
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,0.75), transparent 80%);
+  }
+
+  h1 {
+    color: var(--text);
+    font-size: clamp(1.6rem, 2vw, 2.35rem);
+    letter-spacing: 0.12em;
+    text-shadow: 0 0 18px rgba(36,247,163,0.35), 0 0 36px rgba(74,168,255,0.18);
+  }
+
+  #modeSelect {
+    width: min(920px, 100%);
+    min-height: calc(100vh - 40px);
+    gap: 16px;
+    padding: 42px;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(13,20,42,0.78), rgba(5,8,18,0.76));
+    box-shadow: 0 24px 80px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  #modeSelect h1 {
+    margin-bottom: 2px;
+    font-size: clamp(2.4rem, 7vw, 4.8rem);
+    line-height: 1;
+  }
+
+  .mode-subtitle {
+    color: var(--muted);
+    margin-bottom: 24px;
+    letter-spacing: 0.18em;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+  }
+
+  .mode-btn {
+    position: relative;
+    width: min(420px, 100%);
+    min-width: 0;
+    padding: 18px 22px;
+    border-radius: 12px;
+    border-color: rgba(36,247,163,0.72);
+    background: linear-gradient(135deg, rgba(36,247,163,0.08), rgba(255,255,255,0.025));
+    color: var(--text);
+    letter-spacing: 0.08em;
+    text-align: left;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+
+  .mode-btn::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.11), transparent);
+    transform: translateX(-120%);
+    transition: transform 0.35s ease;
+  }
+
+  .mode-btn:hover::after { transform: translateX(120%); }
+  .mode-btn:hover {
+    background: linear-gradient(135deg, rgba(36,247,163,0.25), rgba(36,247,163,0.08));
+    color: var(--text);
+    border-color: var(--green);
+  }
+
+  .mode-btn.pvp-btn {
+    border-color: rgba(255,107,74,0.72);
+    background: linear-gradient(135deg, rgba(255,107,74,0.10), rgba(255,255,255,0.025));
+  }
+  .mode-btn.pvp-btn:hover {
+    background: linear-gradient(135deg, rgba(255,107,74,0.25), rgba(255,107,74,0.08));
+    color: var(--text);
+    border-color: var(--red);
+  }
+  .mode-btn.online-btn {
+    border-color: rgba(74,168,255,0.72);
+    background: linear-gradient(135deg, rgba(74,168,255,0.12), rgba(255,255,255,0.025));
+  }
+  .mode-btn.online-btn:hover {
+    background: linear-gradient(135deg, rgba(74,168,255,0.26), rgba(74,168,255,0.08));
+    color: var(--text);
+    border-color: var(--blue);
+  }
+
+  .mode-title { display: block; font-size: 1.08rem; font-weight: 800; }
+  .mode-desc {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1.35;
+  }
+
+  .game-page {
+    max-width: 1420px;
+    margin: 0 auto;
+    gap: 12px;
+  }
+
+  .game-page h1 { margin-bottom: 2px; }
+
+  .info-bar,
+  #onlineInfoBar {
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.26);
+  }
+
+  .info-bar .stat,
+  .timer-stat,
+  .skill-indicator,
+  #pvpTimer,
+  #onlineTimer,
+  .online-score-item {
+    min-width: auto;
+    padding: 7px 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.045);
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+
+  .info-bar .stat span,
+  .online-score-item .os-score {
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 1.05rem;
+  }
+
+  .game-row {
+    align-items: stretch;
+    justify-content: center;
+    gap: 18px;
+    width: 100%;
+  }
+
+  .canvas-wrapper {
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
+    box-shadow: 0 20px 70px rgba(0,0,0,0.38), 0 0 34px rgba(36,247,163,0.10);
+  }
+
+  canvas {
+    border: 1px solid rgba(36,247,163,0.68);
+    border-radius: 10px;
+    background: radial-gradient(circle at 50% 48%, #111a32 0%, #080b18 68%);
+    box-shadow: inset 0 0 28px rgba(0,0,0,0.42), 0 0 26px rgba(36,247,163,0.22);
+    width: min(960px, calc(100vw - 340px));
+    height: auto;
+    max-height: calc(100vh - 210px);
+  }
+
+  #pvpWrapper { box-shadow: 0 20px 70px rgba(0,0,0,0.38), 0 0 34px rgba(255,107,74,0.10); }
+  #pvpWrapper canvas {
+    border-color: rgba(255,107,74,0.72);
+    box-shadow: inset 0 0 28px rgba(0,0,0,0.42), 0 0 26px rgba(255,107,74,0.22);
+  }
+  #onlineWrapper { box-shadow: 0 20px 70px rgba(0,0,0,0.38), 0 0 34px rgba(74,168,255,0.10); }
+  #onlineWrapper canvas {
+    border-color: rgba(74,168,255,0.72);
+    box-shadow: inset 0 0 28px rgba(0,0,0,0.42), 0 0 26px rgba(74,168,255,0.22);
+    width: min(1152px, calc(100vw - 340px));
+  }
+
+  #legend, #pvpLegend {
+    width: 240px;
+    min-width: 220px;
+    border-color: var(--line);
+    border-radius: 14px;
+    background: var(--panel-strong);
+    box-shadow: 0 18px 54px rgba(0,0,0,0.28);
+  }
+
+  #legend h2, #pvpLegend h2 {
+    color: var(--text);
+    font-size: 0.86rem;
+    letter-spacing: 0.14em;
+  }
+
+  .legend-item {
+    display: grid;
+    grid-template-columns: 24px 42px 1fr;
+    gap: 9px;
+    padding: 8px 0;
+    margin-bottom: 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .legend-item:last-child { border-bottom: none; }
+  .legend-name { min-width: 0; }
+  .legend-desc { line-height: 1.35; }
+
+  .overlay,
+  .pause-overlay {
+    border-radius: 10px;
+    background: rgba(3, 7, 18, 0.78);
+    backdrop-filter: blur(6px);
+  }
+
+  .overlay button, .back-btn {
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--green), #11c8f2);
+    color: #06101c;
+    box-shadow: 0 10px 24px rgba(36,247,163,0.18);
+  }
+
+  .overlay button:hover, .back-btn:hover {
+    background: linear-gradient(135deg, #5dffc0, #62d4ff);
+  }
+
+  #onlineLobby,
+  #lobbyInfo,
+  #onlinePickerArea {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--panel);
+    padding: 18px;
+    box-shadow: 0 18px 54px rgba(0,0,0,0.28);
+  }
+
+  #lobbyCreate, #lobbyJoin, #playerNameRow {
+    width: 100%;
+    justify-content: center;
+  }
+
+  #onlineLobby .mode-btn {
+    width: auto;
+    min-width: 150px;
+    padding: 12px 18px;
+    text-align: center;
+    font-size: 0.92rem;
+  }
+
+  #onlineLobby .start-btn {
+    min-width: 210px;
+  }
+
+  #lobbyJoin input, #playerNameRow input, #inputCustomRoomId {
+    border: 1px solid rgba(74,168,255,0.55);
+    background: rgba(4,8,20,0.76);
+    border-radius: 10px;
+  }
+
+  @media (max-width: 1180px) {
+    .game-row { flex-direction: column; align-items: center; }
+    canvas, #onlineWrapper canvas { width: min(100%, calc(100vw - 64px)); max-height: none; }
+    #legend, #pvpLegend { width: min(960px, calc(100vw - 64px)); }
+  }
+
+  @media (max-width: 640px) {
+    body { padding: 12px; }
+    #modeSelect { padding: 28px 18px; }
+    .info-bar, #onlineInfoBar { border-radius: 12px; }
+    .mode-btn { padding: 15px 16px; }
+    #lobbyCreate, #lobbyJoin, #playerNameRow { flex-direction: column; }
+  }
 </style>
 </head>
 <body>
@@ -638,17 +936,27 @@
 <!--  MODE SELECTION SCREEN                         -->
 <!-- ════════════════════════════════════════════════ -->
 <div id="modeSelect">
-  <h1>SNAKE GAME</h1>
-  <button class="mode-btn" id="btnSingle">单人模式</button>
-  <button class="mode-btn pvp-btn" id="btnPvp">双人对战 PvP</button>
-  <button class="mode-btn online-btn" id="btnOnline">联机对战</button>
+  <h1>NEON SNAKE</h1>
+  <div class="mode-subtitle">Arcade Arena</div>
+  <button class="mode-btn" id="btnSingle">
+    <span class="mode-title">单人挑战</span>
+    <span class="mode-desc">冲分、刷新最高纪录，适合快速开一局。</span>
+  </button>
+  <button class="mode-btn pvp-btn" id="btnPvp">
+    <span class="mode-title">双人对战 PvP</span>
+    <span class="mode-desc">同屏竞技，技能、复活和狂暴节奏更激烈。</span>
+  </button>
+  <button class="mode-btn online-btn" id="btnOnline">
+    <span class="mode-title">联机对战</span>
+    <span class="mode-desc">创建房间或输入房间号，最多四人对局。</span>
+  </button>
 </div>
 
 <!-- ════════════════════════════════════════════════ -->
 <!--  SINGLE PLAYER PAGE                            -->
 <!-- ════════════════════════════════════════════════ -->
 <div class="game-page" id="singlePage">
-  <h1>SNAKE GAME</h1>
+  <h1>NEON SNAKE</h1>
   <div class="info-bar">
     <div class="stat">Score: <span class="score-val" id="spScoreVal">0</span></div>
     <div class="stat">最高分: <span class="high-val" id="spHighScoreVal">0</span></div>
@@ -686,7 +994,7 @@
 <!--  PVP PAGE                                      -->
 <!-- ════════════════════════════════════════════════ -->
 <div class="game-page" id="pvpPage">
-  <h1>SNAKE GAME - PvP</h1>
+  <h1>NEON SNAKE - PvP</h1>
   <div class="info-bar">
     <div class="stat">P1(WASD/F技能): <span class="score-val" id="pvpScoreLive1" style="color:#00ff66;">0</span></div>
     <div class="stat">P2(↑↓←→/左Ctrl技能): <span class="score-val" id="pvpScoreLive2" style="color:#4488ff;">0</span></div>
@@ -742,7 +1050,7 @@
 <!--  ONLINE MULTIPLAYER PAGE                        -->
 <!-- ════════════════════════════════════════════════ -->
 <div class="game-page" id="onlinePage">
-  <h1>SNAKE GAME - 联机对战</h1>
+  <h1>NEON SNAKE - 联机对战</h1>
 
   <!-- ── Lobby UI ──────────────────────────────── -->
   <div id="onlineLobby">
@@ -1091,6 +1399,29 @@ function spUpdateSpeedDisplay() {
   else { document.getElementById('spSpeedTimer').classList.remove('active'); spSpeedRAF=null; spUpdateSpeed(); }
 }
 
+// ── Drawing helpers ───────────────────────────────
+function fillCell(ctx, x, y, size, color, radius = 5) {
+  const inset = 1.2;
+  const px = x * size + inset;
+  const py = y * size + inset;
+  const w = size - inset * 2;
+  ctx.fillStyle = color;
+  if (ctx.roundRect) {
+    ctx.beginPath();
+    ctx.roundRect(px, py, w, w, Math.min(radius, w / 2));
+    ctx.fill();
+  } else {
+    ctx.fillRect(px, py, w, w);
+  }
+}
+
+function shineCell(ctx, x, y, size) {
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.beginPath();
+  ctx.arc(x * size + size * 0.34, y * size + size * 0.32, Math.max(1.4, size * 0.09), 0, Math.PI * 2);
+  ctx.fill();
+}
+
 // ── Single player drawing ─────────────────────────
 
 function drawFoodSP(food) {
@@ -1138,7 +1469,8 @@ function drawSP() {
     const alpha=1-i*0.006; let c;
     if(i===0) { if(sh)c='#ffb800'; else if(bo)c='#ffdd00'; else c='#00ff66'; }
     else { if(sh)c=`rgba(200,150,0,${Math.max(0.4,alpha)})`; else if(bo)c=`rgba(220,200,0,${Math.max(0.4,alpha)})`; else c=`rgba(0,200,80,${Math.max(0.4,alpha)})`; }
-    spCtx.fillStyle=c; spCtx.fillRect(s.x*GRID+1,s.y*GRID+1,GRID-2,GRID-2);
+    fillCell(spCtx, s.x, s.y, GRID, c, i === 0 ? 6 : 4);
+    if (i === 0) shineCell(spCtx, s.x, s.y, GRID);
   });
 
   if (sh) { const p=0.5+0.5*Math.sin(Date.now()/150); spCtx.strokeStyle=`rgba(255,184,0,${0.35+0.25*p})`; spCtx.lineWidth=2; spCtx.shadowColor='#ffb800'; spCtx.shadowBlur=6+4*p; spSnake.forEach(s=>{spCtx.strokeRect(s.x*GRID+0.5,s.y*GRID+0.5,GRID-1,GRID-1);}); spCtx.shadowBlur=0; }
@@ -2050,14 +2382,15 @@ function drawPvp() {
         let c;
         if (i === 0) { if (totalShield1) c = '#ffb800'; else if (bo1) c = '#ffdd00'; else c = pvpColor1; }
         else { if (totalShield1) c = `rgba(200,150,0,${Math.max(0.4, alpha)})`; else if (bo1) c = `rgba(220,200,0,${Math.max(0.4, alpha)})`; else c = `rgba(${rgb1.r},${rgb1.g},${rgb1.b},${Math.max(0.4, alpha)})`; }
-        pvpCtx.fillStyle = c; pvpCtx.fillRect(s.x * GRID + 1, s.y * GRID + 1, GRID - 2, GRID - 2);
+        fillCell(pvpCtx, s.x, s.y, GRID, c, i === 0 ? 6 : 4);
+        if (i === 0) shineCell(pvpCtx, s.x, s.y, GRID);
       });
     } else {
       // 隐身：仅显示首段第一个方块（头部），其余完全不可见（包括自己）
       const head = pvp.snake1[0];
       if (head) {
-        pvpCtx.fillStyle = pvpColor1;
-        pvpCtx.fillRect(head.x * GRID + 1, head.y * GRID + 1, GRID - 2, GRID - 2);
+        fillCell(pvpCtx, head.x, head.y, GRID, pvpColor1, 6);
+        shineCell(pvpCtx, head.x, head.y, GRID);
       }
     }
     if (totalShield1) { const p = 0.5 + 0.5 * Math.sin(now / 150); pvpCtx.strokeStyle = `rgba(255,184,0,${0.35+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffb800'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake1.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
@@ -2076,14 +2409,15 @@ function drawPvp() {
         let c;
         if (i === 0) { if (totalShield2) c = '#ffb800'; else if (bo2) c = '#ffdd00'; else c = pvpColor2; }
         else { if (totalShield2) c = `rgba(200,150,0,${Math.max(0.4, alpha)})`; else if (bo2) c = `rgba(220,200,0,${Math.max(0.4, alpha)})`; else c = `rgba(${rgb2.r},${rgb2.g},${rgb2.b},${Math.max(0.4, alpha)})`; }
-        pvpCtx.fillStyle = c; pvpCtx.fillRect(s.x * GRID + 1, s.y * GRID + 1, GRID - 2, GRID - 2);
+        fillCell(pvpCtx, s.x, s.y, GRID, c, i === 0 ? 6 : 4);
+        if (i === 0) shineCell(pvpCtx, s.x, s.y, GRID);
       });
     } else {
       // 隐身：仅显示首段第一个方块（头部），其余完全不可见（包括自己）
       const head = pvp.snake2[0];
       if (head) {
-        pvpCtx.fillStyle = pvpColor2;
-        pvpCtx.fillRect(head.x * GRID + 1, head.y * GRID + 1, GRID - 2, GRID - 2);
+        fillCell(pvpCtx, head.x, head.y, GRID, pvpColor2, 6);
+        shineCell(pvpCtx, head.x, head.y, GRID);
       }
     }
     if (totalShield2) { const p = 0.5 + 0.5 * Math.sin(now / 150); pvpCtx.strokeStyle = `rgba(255,184,0,${0.35+0.25*p})`; pvpCtx.lineWidth = 2; pvpCtx.shadowColor = '#ffb800'; pvpCtx.shadowBlur = 6 + 4 * p; pvp.snake2.forEach(s => { pvpCtx.strokeRect(s.x * GRID + 0.5, s.y * GRID + 0.5, GRID - 1, GRID - 1); }); pvpCtx.shadowBlur = 0; }
@@ -3735,8 +4069,8 @@ function drawOnline() {
           else c = `rgba(${rgb.r},${rgb.g},${rgb.b},${Math.max(0.4, alpha)})`;
         }
       }
-      onlineCtx.fillStyle = c;
-      onlineCtx.fillRect(s.x * ONLINE_GRID + 1, s.y * ONLINE_GRID + 1, ONLINE_GRID - 2, ONLINE_GRID - 2);
+      fillCell(onlineCtx, s.x, s.y, ONLINE_GRID, c, i === 0 ? 7 : 5);
+      if (i === 0) shineCell(onlineCtx, s.x, s.y, ONLINE_GRID);
     });
 
     // 隐身蛇的发光边框（自己能看到）
